@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de SKU</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f7f5f0; --surface: #ffffff;
+      --border: rgba(0,0,0,0.08); --border-md: rgba(0,0,0,0.14);
+      --text: #1a1a18; --muted: #6b6b66; --faint: #aaa9a3; --accent: #1a1a1a;
+      --yellow: #fffbea; --yellow-b: #e8cc55; --yellow-t: #7a5c00;
+      --blue: #eaf2ff; --blue-b: #91b8f0; --blue-t: #1040a0;
+      --green: #eaf5ef; --green-b: #7ecfa0; --green-t: #1a6640;
+      --red-t: #a02020; --modal-bg: rgba(0,0,0,0.45);
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem 5rem; }
+    .container { max-width: 1080px; margin: 0 auto; }
+
+    /* ── Setup overlay ── */
+    #setup-overlay {
+      position: fixed; inset: 0; background: rgba(247,245,240,0.97);
+      z-index: 200; display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .setup-card {
+      background: var(--surface); border-radius: 18px; padding: 2.5rem;
+      width: 520px; max-width: calc(100vw - 2rem);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.12);
+      border: 0.5px solid var(--border-md);
+    }
+    .setup-logo { font-size: 11px; font-weight: 500; letter-spacing: 0.14em;
+                  background: var(--accent); color: #f5f0e8; padding: 4px 12px;
+                  border-radius: 20px; display: inline-block; margin-bottom: 1.5rem; }
+    .setup-title { font-size: 20px; font-weight: 500; margin-bottom: 6px; }
+    .setup-sub { font-size: 13px; color: var(--muted); margin-bottom: 2rem; line-height: 1.6; }
+    .setup-label { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px; display: block; }
+    .setup-input {
+      width: 100%; padding: 10px 12px; font-size: 14px; font-family: 'DM Sans', sans-serif;
+      border: 1px solid var(--border-md); border-radius: 8px; background: var(--yellow);
+      border-color: var(--yellow-b); outline: none; margin-bottom: 1.5rem;
+      transition: border-color .15s;
+    }
+    .setup-input:focus { border-color: #999; }
+
+    .setup-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .setup-add-btn {
+      font-size: 12px; padding: 4px 12px; background: var(--surface);
+      border: 0.5px solid var(--border-md); border-radius: 6px;
+      color: var(--text); cursor: pointer; font-family: 'DM Sans', sans-serif;
+      transition: background .12s;
+    }
+    .setup-add-btn:hover { background: var(--bg); }
+
+    .col-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 1.5rem; max-height: 220px; overflow-y: auto; }
+    .col-item {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg); border: 0.5px solid var(--border-md);
+      border-radius: 8px; padding: 7px 10px;
+    }
+    .col-item-name { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .col-item-code {
+      flex: 0 0 auto; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+      color: var(--green-t); background: var(--green); padding: 3px 8px; border-radius: 5px;
+      white-space: nowrap; cursor: pointer;
+    }
+    .col-item-del {
+      background: none; border: none; cursor: pointer; color: var(--faint);
+      font-size: 15px; padding: 2px 5px; line-height: 1; transition: color .12s;
+    }
+    .col-item-del:hover { color: var(--red-t); }
+
+    .setup-new-row { display: flex; gap: 8px; margin-bottom: 1.5rem; align-items: center; }
+    .setup-new-input {
+      flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; font-family: 'DM Sans', sans-serif;
+      border: 1px solid var(--border-md); border-radius: 8px; background: var(--yellow);
+      border-color: var(--yellow-b); outline: none; transition: border-color .15s;
+    }
+    .setup-new-input:focus { border-color: #999; }
+    .setup-new-cod {
+      flex: 0 0 68px; width: 68px; padding: 8px 6px; font-size: 12px;
+      font-family: 'DM Mono', monospace; font-weight: 500; color: var(--green-t);
+      text-align: center; text-transform: uppercase;
+      border: 1px solid var(--green-b); border-radius: 8px; background: var(--green);
+      outline: none;
+    }
+    .setup-new-add {
+      flex: 0 0 auto; padding: 8px 14px; font-size: 13px; background: var(--accent);
+      color: #f5f0e8; border: none; border-radius: 8px; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; white-space: nowrap;
+    }
+    .setup-new-add:hover { opacity: .85; }
+
+    .setup-footer { display: flex; justify-content: flex-end; }
+    .setup-start {
+      padding: 11px 28px; font-size: 14px; background: var(--accent); color: #f5f0e8;
+      border: none; border-radius: 10px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+      font-weight: 500; transition: opacity .15s;
+    }
+    .setup-start:hover { opacity: .85; }
+    .setup-note { font-size: 11px; color: var(--faint); margin-top: 10px; text-align: right; }
+
+    /* ── Main app ── */
+    .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.75rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border-md); }
+    .logo { background: var(--accent); color: #f5f0e8; font-size: 11px; font-weight: 500; padding: 4px 12px; border-radius: 20px; letter-spacing: 0.12em; }
+    .logo-wrap { display: flex; align-items: center; gap: 12px; }
+    .header-title { font-size: 17px; font-weight: 500; }
+    .header-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .vtag { font-size: 10px; background: var(--bg); border: 0.5px solid var(--border-md); border-radius: 8px; padding: 4px 10px; color: var(--muted); }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .settings-btn { font-size: 11px; padding: 4px 12px; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 8px; color: var(--muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .12s; }
+    .settings-btn:hover { background: var(--bg); color: var(--text); }
+
+    .tabs { display: flex; gap: 2px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-md); }
+    .tab { font-size: 13px; padding: 8px 16px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; user-select: none; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); font-weight: 500; border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .info { background: var(--blue); border: 0.5px solid var(--blue-b); border-radius: 8px; padding: 8px 14px; font-size: 12px; color: var(--blue-t); line-height: 1.7; margin-bottom: 1rem; }
+    .warn { background: var(--yellow); border: 0.5px solid var(--yellow-b); border-radius: 8px; padding: 8px 14px; font-size: 12px; color: var(--yellow-t); line-height: 1.7; margin-bottom: 1rem; }
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 1rem; font-size: 11px; color: var(--muted); }
+    .leg { display: flex; align-items: center; gap: 5px; }
+    .leg-dot { width: 9px; height: 9px; border-radius: 3px; }
+
+    .table-wrap { overflow-x: auto; border-radius: 10px; border: 0.5px solid var(--border-md); }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    thead th { padding: 9px 10px; text-align: left; font-size: 10px; font-weight: 500; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; background: #f0ede8; border-bottom: 0.5px solid var(--border-md); white-space: nowrap; }
+    thead th:first-child { border-radius: 10px 0 0 0; }
+    thead th:last-child  { border-radius: 0 10px 0 0; }
+    tbody tr { border-bottom: 0.5px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover td { background: #fafaf7; }
+    td { padding: 5px 8px; vertical-align: middle; }
+    .col-num { width: 32px; text-align: center; color: var(--faint); font-size: 11px; background: #fafaf7; }
+    .cell-yellow input[type="text"],
+    .cell-yellow input[type="number"],
+    .cell-yellow select {
+      background: var(--yellow) !important;
+      border-color: var(--yellow-b) !important;
+      transition: background .2s, border-color .2s;
+    }
+    .cell-yellow input[type="text"].filled,
+    .cell-yellow input[type="number"].filled,
+    .cell-yellow select.filled {
+      background: var(--surface) !important;
+      border-color: var(--border-md) !important;
+    }
+    .cell-blue { background: var(--blue); }
+    .cell-green { background: var(--green); }
+    input[type="text"], input[type="number"], select { width: 100%; padding: 5px 8px; font-size: 12px; font-family: 'DM Sans', sans-serif; border: 1px solid var(--border-md); border-radius: 5px; background: var(--surface); color: var(--text); outline: none; transition: border-color .15s; }
+    input:focus, select:focus { border-color: #999; }
+
+    .sku-out { font-family: 'DM Mono', monospace; font-size: 11.5px; font-weight: 500; color: var(--blue-t); letter-spacing: 0.02em; padding: 4px 8px; min-height: 28px; display: flex; align-items: center; }
+    .sku-out.empty { color: var(--faint); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 400; }
+    .sku-out.partial { color: #c09000; font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; }
+    .cod-out { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--green-t); padding: 4px 8px; min-height: 28px; display: flex; align-items: center; }
+    .cod-out.miss { color: var(--red-t); font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; font-weight: 400; }
+    .conf-out { font-size: 11px; color: var(--muted); padding: 4px 8px; min-height: 28px; display: flex; align-items: center; }
+
+    .row-actions { display: flex; gap: 4px; align-items: center; }
+    .copy-btn { font-size: 10px; padding: 3px 8px; background: var(--surface); border: 0.5px solid var(--blue-b); border-radius: 5px; color: var(--blue-t); cursor: pointer; white-space: nowrap; transition: background .15s; font-family: 'DM Sans', sans-serif; }
+    .copy-btn:hover { background: var(--blue); }
+    .copy-btn.copied { background: var(--green); border-color: var(--green-b); color: var(--green-t); }
+    .icon-btn { background: none; border: 0.5px solid var(--border-md); border-radius: 5px; cursor: pointer; color: var(--muted); font-size: 13px; padding: 3px 7px; transition: all .15s; font-family: 'DM Sans', sans-serif; line-height: 1; }
+    .icon-btn:hover { background: #f0ede8; color: var(--text); }
+    .icon-btn.del:hover { background: #fff0f0; color: var(--red-t); border-color: #f0a0a0; }
+
+    .bottom-bar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+    .add-btn { font-size: 12px; padding: 8px 16px; background: var(--surface); border: 0.5px dashed var(--border-md); border-radius: 8px; color: var(--muted); cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; font-family: 'DM Sans', sans-serif; }
+    .add-btn:hover { background: #f0ede8; color: var(--text); }
+    .bulk-btn { font-size: 12px; padding: 8px 16px; background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 8px; color: var(--text); cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; font-family: 'DM Sans', sans-serif; }
+    .bulk-btn:hover { background: #f0ede8; }
+
+    .export-bar { display: flex; gap: 10px; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
+    .export-btn { font-size: 12px; padding: 8px 18px; background: var(--accent); color: #f5f0e8; border: none; border-radius: 8px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity .15s; }
+    .export-btn:hover { opacity: .85; }
+    .export-btn.sec { background: var(--surface); color: var(--text); border: 0.5px solid var(--border-md); }
+    .export-note { font-size: 11px; color: var(--muted); }
+
+    /* ── Bulk modal ── */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: var(--modal-bg); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border-radius: 14px; padding: 1.75rem; width: 520px; max-width: calc(100vw - 2rem); max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.18); }
+    .modal-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+    .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 1.25rem; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1.25rem; }
+    .modal-field { display: flex; flex-direction: column; gap: 5px; }
+    .modal-field.full { grid-column: 1 / -1; }
+    .modal-label { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+    .modal input[type="text"], .modal select { background: var(--yellow); border-color: var(--yellow-b); transition: background .2s, border-color .2s; }
+    .modal input[type="text"].filled, .modal select.filled { background: var(--surface) !important; border-color: var(--border-md) !important; }
+    .check-group { display: flex; flex-wrap: wrap; gap: 6px; }
+    .check-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border-md); cursor: pointer; background: var(--surface); transition: all .12s; user-select: none; }
+    .check-chip input { display: none; }
+    .check-chip.checked { background: var(--blue); border-color: var(--blue-b); color: var(--blue-t); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 1rem; }
+    .modal-actions button { font-size: 13px; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-family: 'DM Sans', sans-serif; border: 0.5px solid var(--border-md); }
+    .btn-cancel { background: var(--surface); color: var(--text); }
+    .btn-generate { background: var(--accent); color: #f5f0e8; border-color: var(--accent); transition: opacity .15s, background .15s; }
+    .btn-generate:hover:not(:disabled) { opacity: .85; }
+    .btn-generate:disabled { background: #cccccc; border-color: #cccccc; color: #999999; cursor: not-allowed; opacity: 1; }
+    .modal-preview { font-size: 12px; color: var(--muted); padding: 8px 12px; background: var(--bg); border-radius: 6px; margin-top: 8px; }
+
+    /* ── Ref tables ── */
+    .ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .ref-section { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 10px; overflow: hidden; }
+    .ref-hdr { background: #f0ede8; padding: 7px 12px; font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border-bottom: 0.5px solid var(--border-md); }
+    .ref-row { display: flex; align-items: center; border-bottom: 0.5px solid var(--border); font-size: 12px; }
+    .ref-row:last-child { border-bottom: none; }
+    .ref-code { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--green-t); background: var(--green); padding: 5px 10px; min-width: 54px; flex-shrink: 0; }
+    .ref-name { padding: 5px 10px; color: var(--text); flex: 1; }
+    .ref-alias { padding: 5px 10px; font-size: 10px; color: var(--faint); flex: 2; }
+
+    /* ── Instrucoes ── */
+    .instr-block { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 12px; }
+    .instr-title { font-size: 13px; font-weight: 500; margin-bottom: 10px; }
+    .instr-item { display: flex; gap: 10px; font-size: 13px; color: var(--muted); padding: 5px 0; line-height: 1.6; }
+    .instr-num { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+    .sku-ex { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; background: var(--blue); color: var(--blue-t); padding: 8px 14px; border-radius: 6px; margin: 8px 0; display: inline-block; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ═══ SETUP OVERLAY ═══ -->
+  <div id="setup-overlay">
+    <div class="setup-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem">
+        <div class="setup-logo" id="setup-logo-tag">SKU GENERATOR</div>
+        <button id="setup-close-btn" onclick="closeSettings()"
+          style="display:none;background:none;border:0.5px solid var(--border-md);border-radius:6px;
+                 cursor:pointer;color:var(--muted);font-size:16px;padding:2px 9px;line-height:1;
+                 transition:all .12s;font-family:'DM Sans',sans-serif"
+          title="Fechar">×</button>
+      </div>
+      <div class="setup-title" id="setup-title-text">Bem-vinda! Vamos configurar sua ferramenta.</div>
+      <div class="setup-sub">Esta configuração fica salva no seu navegador — você faz isso uma vez e pode alterar depois em "Configurações". Adicione as coleções da sua marca: use nomes como <em>Verão 2026</em>, <em>Drop 01</em> ou <em>Básicos</em>. O código curto é gerado automaticamente.</div>
+
+      <label class="setup-label">Nome da marca</label>
+      <input class="setup-input" id="setup-marca" type="text" placeholder="Ex: Minha Marca" oninput="updateSetupLogo()">
+
+      <div class="setup-label-row">
+        <span class="setup-label" style="margin-bottom:0">Suas coleções</span>
+        <span style="font-size:11px;color:var(--muted)">O código é gerado automaticamente</span>
+      </div>
+
+      <div class="col-list" id="setup-col-list"></div>
+
+      <div class="setup-new-row">
+        <input class="setup-new-input" id="setup-new-name" type="text" placeholder="Nome da coleção (ex: Verão 2026)" oninput="updateNewCodPreview()" onkeydown="handleNewColEnter(event)">
+        <input class="setup-new-cod" id="setup-new-cod" type="text" placeholder="cód" title="Código gerado automaticamente — editável" style="cursor:text">
+        <button class="setup-new-add" onclick="addSetupCol()">+ Adicionar</button>
+      </div>
+
+      <div style="border-top:1px solid var(--border-md);margin-top:1.25rem;padding-top:1.25rem">
+        <div style="font-size:11px;color:var(--faint);line-height:1.7">
+          💾 <strong style="color:var(--muted)">Dados salvos no navegador.</strong>
+          Suas configurações ficam armazenadas localmente neste dispositivo e persistem mesmo ao fechar o navegador.<br>
+          🔄 <strong style="color:var(--muted)">Para redefinir tudo</strong> — apagar marca e coleções e recomeçar do zero — use o botão
+          <strong style="color:var(--muted)">↺ Redefinir configurações</strong> no rodapé da página principal.
+        </div>
+      </div>
+
+      <div class="setup-footer" style="margin-top:1.25rem">
+        <div>
+          <button class="setup-start" onclick="finishSetup()">Começar →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MAIN APP ═══ -->
+  <div id="main-app" style="display:none">
+    <div class="header">
+      <div class="logo-wrap">
+        <span class="logo" id="app-logo">MARCA</span>
+        <div>
+          <div class="header-title">Gerador de SKU</div>
+          <div class="header-sub">Preencha os campos — SKU gerado automaticamente</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="settings-btn" onclick="openSettings()">⚙ Configurações</button>
+        <span class="vtag">v1 · rev3</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('gerador')">Gerador SKU</div>
+      <div class="tab" onclick="showTab('tabelas')">Tabelas de referência</div>
+      <div class="tab" onclick="showTab('instrucoes')">Instruções</div>
+    </div>
+
+    <!-- GERADOR -->
+    <div id="tab-gerador" class="tab-content active">
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:#e8cc55"></div> Preencher</div>
+        <div class="leg"><div class="leg-dot" style="background:#7ecfa0"></div> Automático</div>
+        <div class="leg"><div class="leg-dot" style="background:#91b8f0"></div> SKU gerado</div>
+      </div>
+      <div class="warn">⚠️ Nunca edite a coluna SKU manualmente. Ela é gerada automaticamente quando todos os campos estiverem preenchidos.</div>
+      <div class="info" style="margin-bottom:1rem">💡 Antes de começar, registre as coleções da sua marca em <strong>⚙ Configurações</strong> — elas aparecem como opção na coluna Coleção. Você pode adicionar ou remover coleções a qualquer momento.</div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button class="bulk-btn" onclick="sortTable()" id="sort-btn" title="Ordenar por Tipo → Nome → Cor → Tamanho" style="font-size:11px;padding:5px 12px">⇅ Ordenar A–Z</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th style="min-width:110px">TIPO <span style="font-weight:400;text-transform:none;font-style:italic">— digite a peça</span></th>
+              <th style="min-width:64px;background:#d8f0e4">COD.</th>
+              <th style="min-width:140px">NOME BASE</th>
+              <th style="min-width:110px">COR</th>
+              <th style="min-width:90px">TAMANHO</th>
+              <th style="min-width:110px">COLEÇÃO</th>
+              <th style="min-width:180px;background:#c8dcf8">SKU GERADO</th>
+              <th style="min-width:130px">CONFERÊNCIA</th>
+              <th style="width:96px"></th>
+            </tr>
+          </thead>
+          <tbody id="sku-tbody"></tbody>
+        </table>
+      </div>
+      <div class="bottom-bar">
+        <button class="add-btn" onclick="addRow()">+ Adicionar produto único</button>
+        <button class="bulk-btn" onclick="openBulk()">⚡ Adicionar lote de produtos</button>
+      </div>
+      <div class="export-bar">
+        <button class="export-btn" onclick="exportCSV()">Exportar CSV</button>
+        <button class="export-btn sec" onclick="clearAll()">Limpar tudo</button>
+        <span class="export-note">⚠️ Este CSV contém apenas os SKUs gerados. Cole a coluna SKU no arquivo de importação do WooCommerce.</span>
+      </div>
+
+      <div style="margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--border-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <span style="font-size:11px;color:var(--faint)">Gerador de SKU · v1</span>
+        <button onclick="resetAll()"
+          style="font-size:11px;padding:6px 14px;background:none;border:0.5px solid var(--border-md);
+                 border-radius:7px;color:var(--faint);cursor:pointer;font-family:'DM Sans',sans-serif;
+                 transition:all .15s"
+          onmouseover="this.style.borderColor='#f0a0a0';this.style.color='var(--red-t)'"
+          onmouseout="this.style.borderColor='var(--border-md)';this.style.color='var(--faint)'"
+          title="Apaga todas as configurações salvas (marca, coleções) e reinicia do zero">
+          ↺ Redefinir configurações
+        </button>
+      </div>
+    </div>
+
+    <!-- TABELAS -->
+    <div id="tab-tabelas" class="tab-content">
+      <div class="info">ℹ️ Para adicionar ou remover coleções, use o botão <strong>⚙ Configurações</strong> no cabeçalho. Os outros dados (tipos, cores, tamanhos) ficam fixos no arquivo.</div>
+      <div class="ref-grid" id="ref-grid"></div>
+    </div>
+
+    <!-- INSTRUÇÕES -->
+    <div id="tab-instrucoes" class="tab-content">
+      <div class="instr-block">
+        <div class="instr-title">Estrutura do SKU</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Formato: <strong>TIPO/NOME-COR-TAM</strong></div>
+        <div class="sku-ex">COR/CORS-PTO-M</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">→ Corset · Preto · M</div>
+      </div>
+      <div class="instr-block">
+        <div class="instr-title">Passo a passo</div>
+        <div class="instr-item"><span class="instr-num">1.</span><span>Confira a aba <strong>Tabelas</strong>. Para gerenciar coleções, use <strong>⚙ Configurações</strong>.</span></div>
+        <div class="instr-item"><span class="instr-num">2.</span><span>Linha em branco ou <strong>⚡ Gerar em lote</strong> para múltiplas combinações de uma vez.</span></div>
+        <div class="instr-item"><span class="instr-num">3.</span><span>Clique em <strong>⧉</strong> para duplicar uma linha existente e alterar só o que precisa.</span></div>
+        <div class="instr-item"><span class="instr-num">4.</span><span>Use <strong>Exportar CSV</strong> antes de fechar. Os dados do gerador não são salvos entre sessões.</span></div>
+      </div>
+      <div class="instr-block">
+        <div class="instr-title">Código de coleção automático</div>
+        <div class="instr-item"><span class="instr-num">·</span><span>"Verão 2026" → <code style="font-family:'DM Mono',monospace">VER26</code> — 3 letras + número</span></div>
+        <div class="instr-item"><span class="instr-num">·</span><span>"Drop 01" → <code style="font-family:'DM Mono',monospace">DRO01</code> — 3 letras + número</span></div>
+        <div class="instr-item"><span class="instr-num">·</span><span>"Básicos" → <code style="font-family:'DM Mono',monospace">BAS</code> — só letras quando não há número</span></div>
+        <div class="instr-item"><span class="instr-num">·</span><span>Você pode editar o código manualmente na tela de configurações se precisar.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BULK MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">⚡ Gerar em lote</div>
+      <button onclick="closeBulk()"
+        style="background:none;border:0.5px solid var(--border-md);border-radius:6px;
+               cursor:pointer;color:var(--muted);font-size:16px;padding:2px 9px;line-height:1;
+               transition:all .12s;font-family:'DM Sans',sans-serif"
+        onmouseover="this.style.background='#f0ede8';this.style.color='var(--text)'"
+        onmouseout="this.style.background='none';this.style.color='var(--muted)'"
+        title="Fechar">×</button>
+    </div>
+    <div class="modal-sub">Preencha uma vez e selecione múltiplas cores e tamanhos. Uma linha por combinação.</div>
+    <div class="modal-grid">
+      <div class="modal-field full">
+        <span class="modal-label">Tipo do produto</span>
+        <input type="text" id="bulk-tipo" placeholder="ex: vestido, blusa, corset" oninput="updateBulkPreview()">
+        <div id="bulk-cod-preview" style="font-size:11px;color:var(--green-t);font-family:'DM Mono',monospace;margin-top:3px;min-height:16px"></div>
+      </div>
+      <div class="modal-field full">
+        <span class="modal-label">Nome base</span>
+        <input type="text" id="bulk-nome" placeholder="ex: Vestido Midi" oninput="updateBulkPreview()">
+      </div>
+      <div class="modal-field full">
+        <span class="modal-label">Coleção</span>
+        <select id="bulk-col" onchange="updateBulkPreview()">
+          <option value="">Selecionar...</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="modal-label" style="margin-bottom:8px">Cores</div>
+      <div class="check-group" id="bulk-cores"></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="modal-label" style="margin-bottom:8px">Tamanhos</div>
+      <div class="check-group" id="bulk-tamanhos"></div>
+    </div>
+    <div class="modal-preview" id="bulk-preview">Selecione tipo, nome, cores e tamanhos para ver o preview.</div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeBulk()">Cancelar</button>
+      <button class="btn-generate" id="bulk-generate-btn" onclick="generateBulk()" disabled>Gerar linhas</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────
+const TIPOS = [
+  // ── Roupas superiores ──
+  {cod:'CAM',nome:'Camiseta',   alias:['camiseta','t-shirt','tshirt','camisa']},
+  {cod:'BLU',nome:'Blusa',      alias:['blusa','blusinha','blouse']},
+  {cod:'TOP',nome:'Top',        alias:['top','cropped top','crop top']},
+  {cod:'REG',nome:'Regata',     alias:['regata','cropped','tank top']},
+  {cod:'COR',nome:'Corset',     alias:['corset','corsete','bustier','bustie']},
+  {cod:'CAR',nome:'Cardigan',   alias:['cardigan','cardigã']},
+  {cod:'TRI',nome:'Tricô',      alias:['trico','tricô','knit','malha']},
+  {cod:'AGS',nome:'Agasalho',   alias:['agasalho','moletom','sweater','hoodie','moleton']},
+  // ── Roupas inferiores ──
+  {cod:'CAL',nome:'Calça',      alias:['calca','calça','jeans','pantalona','trouser']},
+  {cod:'SAI',nome:'Saia',       alias:['saia','skirt']},
+  {cod:'SHO',nome:'Shorts',     alias:['shorts','short','bermuda']},
+  {cod:'LEG',nome:'Legging',    alias:['legging','leggings']},
+  // ── Vestidos e macacões ──
+  {cod:'VES',nome:'Vestido',    alias:['vestido','dress']},
+  {cod:'MAC',nome:'Macacão',    alias:['macacao','macacão','jumpsuit','macacão']},
+  {cod:'OVE',nome:'Overall',    alias:['overall','jardineira','salopete']},
+  {cod:'TUN',nome:'Túnica',     alias:['tunica','túnica']},
+  // ── Conjuntos ──
+  {cod:'CON',nome:'Conjunto',   alias:['conjunto','set','co-ord','coord']},
+  // ── Casacos e externas ──
+  {cod:'JAQ',nome:'Jaqueta',    alias:['jaqueta','jacket','jaquetinha']},
+  {cod:'BLZ',nome:'Blazer',     alias:['blazer']},
+  {cod:'CAS',nome:'Casaco',     alias:['casaco','sobretudo','coat','casacão']},
+  {cod:'COL',nome:'Colete',     alias:['colete','vest','colete']},
+  {cod:'KIM',nome:'Kimono',     alias:['kimono','quimono']},
+  // ── Acessórios ──
+  {cod:'BOL',nome:'Bolsa',      alias:['bolsa','bag','bolsinha','tote','sacola']},
+  {cod:'CIN',nome:'Cinto',      alias:['cinto','belt','cintinho']},
+  {cod:'LEN',nome:'Lenço',      alias:['lenco','lenço','scarf','foulard']},
+  {cod:'CHA',nome:'Chapéu',     alias:['chapeu','chapéu','hat','bucket hat','bone','boné']},
+  {cod:'OCU',nome:'Óculos',     alias:['oculos','óculos','sunglasses','sunglass']},
+  {cod:'COB',nome:'Colar',      alias:['colar','necklace','colarzinho']},
+  {cod:'BRI',nome:'Brinco',     alias:['brinco','earring','ear ring']},
+  {cod:'PUL',nome:'Pulseira',   alias:['pulseira','bracelet','bracelete']},
+  {cod:'ANE',nome:'Anel',       alias:['anel','ring']},
+  {cod:'MEI',nome:'Meia',       alias:['meia','sock','socks','meia-calça','meia calca']},
+];
+const CORES = [
+  {cod:'PTO',nome:'Preto'},{cod:'BCO',nome:'Branco'},{cod:'CIN',nome:'Cinza'},
+  {cod:'BEG',nome:'Bege'},{cod:'MRR',nome:'Marrom'},{cod:'VRM',nome:'Vermelho'},
+  {cod:'ROS',nome:'Rosa'},{cod:'VNH',nome:'Vinho'},{cod:'AZL',nome:'Azul'},
+  {cod:'AZM',nome:'Azul Marinho'},{cod:'VRD',nome:'Verde'},{cod:'VDO',nome:'Verde Oliva'},
+  {cod:'AML',nome:'Amarelo'},{cod:'LRJ',nome:'Laranja'},{cod:'LLS',nome:'Lilás'},
+  {cod:'LVN',nome:'Lavanda'},{cod:'GLD',nome:'Dourado'},{cod:'PRT',nome:'Prateado'},
+  {cod:'EST',nome:'Estampado'},{cod:'TIE',nome:'Tie-dye'},{cod:'NUD',nome:'Nude'},
+  {cod:'TER',nome:'Terracota'},{cod:'OFF',nome:'Off-white'},
+];
+const TAMANHOS = [
+  {cod:'PP',nome:'PP'},{cod:'P',nome:'P'},{cod:'M',nome:'M'},
+  {cod:'G',nome:'G'},{cod:'GG',nome:'GG'},{cod:'XGG',nome:'XGG'},
+  {cod:'34',nome:'34'},{cod:'36',nome:'36'},{cod:'38',nome:'38'},
+  {cod:'40',nome:'40'},{cod:'42',nome:'42'},{cod:'44',nome:'44'},
+  {cod:'46',nome:'46'},{cod:'48',nome:'48'},{cod:'UN',nome:'Único'},
+];
+
+// ── COLECOES — from localStorage ────────────────────────────
+let COLECOES = [];
+let marcaNome = '';
+
+const LS_KEY = 'sku_config_v1';
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const cfg = JSON.parse(raw);
+      COLECOES = cfg.colecoes || [];
+      marcaNome = cfg.marca || 'Minha Marca';
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function saveConfig() {
+  localStorage.setItem(LS_KEY, JSON.stringify({ marca: marcaNome, colecoes: COLECOES }));
+}
+
+// ── Auto-code from collection name ──────────────────────────
+function gerarCodColecao(nome) {
+  if (!nome) return '';
+  // Remove accents, uppercase
+  const n = nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  // Split into tokens by spaces, then for each token split letters from digits
+  // e.g. "Outono26" → ["OUT","26"]  "Drop 01" → ["DRO","01"]  "Básicos" → ["BAS"]
+  const raw = n.replace(/[^A-Z0-9\s]/g,'').trim().split(/\s+/);
+  let letPart = '', numPart = '';
+  for (const token of raw) {
+    // Split token into letter-runs and digit-runs
+    const parts = token.match(/[A-Z]+|\d+/g) || [];
+    for (const p of parts) {
+      if (/^\d+$/.test(p)) { numPart = p.slice(-2); }
+      else { letPart += p.slice(0, 3); }
+    }
+  }
+  return (letPart.slice(0,3) + numPart).slice(0,6);
+}
+
+// ── Setup screen ─────────────────────────────────────────────
+function updateSetupLogo() {
+  // just visual feedback
+}
+
+const DEFAULT_COLS = [
+  'Verão 2026',   // Ex: coleção sazonal com ano
+  'Drop 01',      // Ex: lançamento numerado
+  'Básicos',      // Ex: linha permanente sem sazonalidade
+];
+
+function initSetupColList() {
+  const list = document.getElementById('setup-col-list');
+  list.innerHTML = '';
+  const cols = COLECOES.length ? COLECOES : DEFAULT_COLS.map(n=>({nome:n, cod:gerarCodColecao(n)}));
+  cols.forEach((c,i) => renderSetupItem(c.nome, c.cod, i));
+}
+
+function renderSetupItem(nome, cod, idx) {
+  const list = document.getElementById('setup-col-list');
+  const div = document.createElement('div');
+  div.className = 'col-item';
+  div.dataset.idx = idx;
+  div.innerHTML = `
+    <span class="col-item-name">${nome}</span>
+    <span class="col-item-code" title="Código (clique para editar)" onclick="editColCode(this)">${cod}</span>
+    <button class="col-item-del" onclick="removeSetupCol(this)" title="Remover">×</button>`;
+  list.appendChild(div);
+}
+
+function removeSetupCol(btn) {
+  btn.closest('.col-item').remove();
+}
+
+function updateNewCodPreview() {
+  const val = document.getElementById('setup-new-name').value;
+  document.getElementById('setup-new-cod').value = gerarCodColecao(val);
+}
+
+function handleNewColEnter(e) {
+  if (e.key === 'Enter') addSetupCol();
+}
+
+function addSetupCol() {
+  const nameEl = document.getElementById('setup-new-name');
+  const codEl  = document.getElementById('setup-new-cod');
+  const nome = nameEl.value.trim();
+  if (!nome) return;
+  const cod  = codEl.value.trim() || gerarCodColecao(nome);
+  const list = document.getElementById('setup-col-list');
+  renderSetupItem(nome, cod, list.children.length);
+  nameEl.value = ''; codEl.value = '';
+  nameEl.focus();
+}
+
+function editColCode(el) {
+  const cur = el.textContent.trim();
+  const input = document.createElement('input');
+  input.value = cur; input.maxLength = 6;
+  input.style.cssText = 'width:64px;font-family:"DM Mono",monospace;font-size:11px;font-weight:500;color:var(--green-t);background:var(--green);border:1px solid var(--green-b);border-radius:4px;padding:2px 5px;text-align:center;outline:none;text-transform:uppercase';
+  el.replaceWith(input); input.focus(); input.select();
+  function commit() {
+    const span = document.createElement('span');
+    span.className = 'col-item-code'; span.title = 'Código (clique para editar)';
+    span.onclick = function(){ editColCode(this); };
+    span.textContent = (input.value.trim().toUpperCase() || cur).slice(0,6);
+    input.replaceWith(span);
+  }
+  input.onblur = commit;
+  input.onkeydown = e => { if(e.key==='Enter') commit(); if(e.key==='Escape'){ input.value=cur; commit(); } };
+}
+
+function finishSetup() {
+  const marca = document.getElementById('setup-marca').value.trim() || 'MARCA';
+  const items = document.querySelectorAll('#setup-col-list .col-item');
+  const cols = [];
+  items.forEach(item => {
+    const nome = item.querySelector('.col-item-name').textContent.trim();
+    const cod  = item.querySelector('.col-item-code').textContent.trim();
+    if (nome) cols.push({nome, cod});
+  });
+  if (!cols.length) { alert('Adicione ao menos uma coleção antes de continuar.'); return; }
+  marcaNome = marca;
+  COLECOES  = cols;
+  saveConfig();
+  launchApp();
+}
+
+function launchApp() {
+  document.getElementById('setup-overlay').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  document.getElementById('app-logo').textContent = marcaNome.toUpperCase();
+  document.title = `Gerador de SKU — ${marcaNome}`;
+  buildRefGrid();
+  addRow();
+}
+
+// ── Settings (re-open config) ────────────────────────────────
+function openSettings() {
+  document.getElementById('setup-marca').value = marcaNome;
+  const list = document.getElementById('setup-col-list');
+  list.innerHTML = '';
+  COLECOES.forEach((c,i) => renderSetupItem(c.nome, c.cod, i));
+  document.getElementById('setup-close-btn').style.display = 'block';
+  document.getElementById('setup-title-text').textContent = 'Configurações';
+  document.getElementById('setup-overlay').style.display = 'flex';
+}
+
+function closeSettings() {
+  const marca = document.getElementById('setup-marca').value.trim() || 'Minha Marca';
+  const items = document.querySelectorAll('#setup-col-list .col-item');
+  if (items.length > 0) {
+    const cols = [];
+    items.forEach(item => {
+      const nome = item.querySelector('.col-item-name').textContent.trim();
+      const cod  = item.querySelector('.col-item-code').textContent.trim();
+      if (nome) cols.push({nome, cod});
+    });
+    if (cols.length) { marcaNome = marca; COLECOES = cols; saveConfig(); }
+    document.getElementById('app-logo').textContent = marcaNome.toUpperCase();
+    document.title = 'Gerador de SKU — ' + marcaNome;
+    buildRefGrid();
+    refreshColSelects();
+  }
+  document.getElementById('setup-overlay').style.display = 'none';
+}
+
+function refreshColSelects() {
+  document.querySelectorAll('#sku-tbody tr').forEach(tr => {
+    const id = tr.id.replace('row-','');
+    const sel = document.getElementById('col-' + id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Coleção...</option>';
+    COLECOES.forEach(c => {
+      const o = document.createElement('option');
+      o.value=c.cod; o.textContent=c.nome;
+      if (c.cod===cur) o.selected=true;
+      sel.appendChild(o);
+    });
+  });
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function normalize(s) {
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+function findTipoCod(text) {
+  if (!text) return null;
+  const n = normalize(text);
+  for (const t of TIPOS) {
+    if (normalize(t.nome) === n) return t.cod;
+    for (const a of t.alias) { if (normalize(a) === n) return t.cod; }
+  }
+  return null;
+}
+function nome4(nomeBase) { return nomeBase.replace(/\s+/g,'').substring(0,4).toUpperCase(); }
+function buildSKU(tipoCod, nomeBase, corCod, tamCod, colCod) {
+  if (!tipoCod || !nomeBase || !corCod || !tamCod) return '';
+  const base = `${tipoCod}/${nome4(nomeBase)}-${corCod}-${tamCod}`;
+  return colCod ? `${base}-${colCod}` : base;
+}
+function makeSelect(options, placeholder) {
+  let h = `<select><option value="">${placeholder}</option>`;
+  for (const o of options) h += `<option value="${o.cod}">${o.nome}</option>`;
+  return h + '</select>';
+}
+
+// ── Row management ───────────────────────────────────────────
+let rowCount = 0;
+function addRow(data={}) {
+  rowCount++;
+  const id = rowCount;
+  const tbody = document.getElementById('sku-tbody');
+  const tr = document.createElement('tr');
+  tr.id = `row-${id}`;
+  tr.innerHTML = `
+    <td class="col-num" id="num-${id}">${id}</td>
+    <td class="cell-yellow"><input type="text" id="tipo-${id}" placeholder="ex: vestido" oninput="updateRow(${id})" value="${data.tipo||''}"></td>
+    <td class="cell-green"><div class="cod-out" id="cod-${id}">—</div></td>
+    <td class="cell-yellow"><input type="text" id="nome-${id}" placeholder="ex: Vestido Midi" oninput="updateRow(${id})" value="${data.nome||''}"></td>
+    <td class="cell-yellow">${makeSelect(CORES,'Cor...')}</td>
+    <td class="cell-yellow">${makeSelect(TAMANHOS,'Tam...')}</td>
+    <td class="cell-yellow">${makeSelect(COLECOES,'Coleção...')}</td>
+    <td class="cell-blue">
+      <div style="display:flex;align-items:center;gap:5px">
+        <div class="sku-out empty" id="sku-${id}">preencha os campos</div>
+        <button class="copy-btn" id="copy-${id}" onclick="copySKU(${id})" style="display:none">Copiar</button>
+      </div>
+    </td>
+    <td><div class="conf-out" id="conf-${id}"></div></td>
+    <td>
+      <div class="row-actions">
+        <button class="icon-btn" onclick="duplicateRow(${id})" title="Duplicar">⧉</button>
+        <button class="icon-btn del" onclick="removeRow(${id})" title="Remover">×</button>
+      </div>
+    </td>`;
+  tbody.appendChild(tr);
+  const sels = tr.querySelectorAll('select');
+  sels[0].id=`cor-${id}`; sels[0].value=data.cor||''; sels[0].onchange=()=>updateRow(id);
+  sels[1].id=`tam-${id}`; sels[1].value=data.tam||''; sels[1].onchange=()=>updateRow(id);
+  sels[2].id=`col-${id}`; sels[2].value=data.col||''; sels[2].onchange=()=>updateRow(id);
+  updateRow(id); renumberRows(); return id;
+}
+function removeRow(id) { document.getElementById(`row-${id}`).remove(); renumberRows(); }
+function duplicateRow(id) {
+  const data = {
+    tipo: document.getElementById(`tipo-${id}`)?.value||'',
+    nome: document.getElementById(`nome-${id}`)?.value||'',
+    cor:  document.getElementById(`cor-${id}`)?.value||'',
+    tam:  document.getElementById(`tam-${id}`)?.value||'',
+    col:  document.getElementById(`col-${id}`)?.value||'',
+  };
+  const newId = addRow(data);
+  document.getElementById(`row-${id}`).after(document.getElementById(`row-${newId}`));
+  renumberRows();
+}
+function renumberRows() {
+  document.querySelectorAll('#sku-tbody tr').forEach((tr,i) => {
+    const el = tr.querySelector('.col-num'); if(el) el.textContent = i+1;
+  });
+}
+function updateRow(id) {
+  const tipoText = (document.getElementById(`tipo-${id}`)?.value||'').trim();
+  const nomeBase = (document.getElementById(`nome-${id}`)?.value||'').trim();
+  // Toggle white background when filled
+  const tipoEl = document.getElementById(`tipo-${id}`);
+  const nomeEl = document.getElementById(`nome-${id}`);
+  const corEl  = document.getElementById(`cor-${id}`);
+  const tamEl  = document.getElementById(`tam-${id}`);
+  const colEl  = document.getElementById(`col-${id}`);
+  if (tipoEl) tipoEl.classList.toggle('filled', tipoText.length > 0);
+  if (nomeEl) nomeEl.classList.toggle('filled', nomeBase.length > 0);
+  if (corEl)  corEl.classList.toggle('filled',  corEl.value  !== '');
+  if (tamEl)  tamEl.classList.toggle('filled',  tamEl.value  !== '');
+  if (colEl)  colEl.classList.toggle('filled',  colEl.value  !== '');
+  const corCod   = document.getElementById(`cor-${id}`)?.value||'';
+  const tamCod   = document.getElementById(`tam-${id}`)?.value||'';
+  const colCod   = document.getElementById(`col-${id}`)?.value||'';
+  const codEl = document.getElementById(`cod-${id}`);
+  let tipoCod = '';
+  if (!tipoText) { codEl.textContent='—'; codEl.className='cod-out'; }
+  else {
+    const found = findTipoCod(tipoText);
+    if (found) { tipoCod=found; codEl.textContent=found; codEl.className='cod-out'; }
+    else { codEl.textContent='não reconhecido'; codEl.className='cod-out miss'; }
+  }
+  const skuEl=document.getElementById(`sku-${id}`), copyEl=document.getElementById(`copy-${id}`);
+  const sku = buildSKU(tipoCod, nomeBase, corCod, tamCod, colCod);
+  if (sku) {
+    skuEl.textContent=sku; skuEl.className='sku-out';
+    copyEl.style.display='inline-block'; copyEl.classList.remove('copied'); copyEl.textContent='Copiar';
+  } else {
+    const any = tipoText||nomeBase||corCod||tamCod;
+    skuEl.textContent = any ? 'complete todos os campos' : 'preencha os campos';
+    skuEl.className = any ? 'sku-out partial' : 'sku-out empty';
+    copyEl.style.display='none';
+  }
+  const confEl=document.getElementById(`conf-${id}`);
+  const corNome=CORES.find(c=>c.cod===corCod)?.nome||'';
+  const tamNome=TAMANHOS.find(t=>t.cod===tamCod)?.nome||'';
+  const colNome=COLECOES.find(c=>c.cod===colCod)?.nome||'';
+  confEl.textContent=[nomeBase,corNome,tamNome,colNome].filter(Boolean).join(' · ');
+}
+function copySKU(id) {
+  const sku=document.getElementById(`sku-${id}`)?.textContent||'';
+  if(!sku||sku.includes('preencha')||sku.includes('complete')||sku.includes('não')) return;
+  navigator.clipboard.writeText(sku).then(()=>{
+    const btn=document.getElementById(`copy-${id}`);
+    btn.textContent='Copiado!'; btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent='Copiar';btn.classList.remove('copied');},2000);
+  });
+}
+function clearAll() {
+  if(!confirm('Limpar todas as linhas?')) return;
+  document.getElementById('sku-tbody').innerHTML=''; rowCount=0; addRow();
+}
+
+function sortTable() {
+  const tbody = document.getElementById('sku-tbody');
+  const rows = [...tbody.querySelectorAll('tr')];
+  if (rows.length < 2) return;
+
+  // Extract sort key for each row: tipo | nome | cor | tamanho
+  function getSortKey(tr) {
+    const id = tr.id.replace('row-','');
+    const tipo = (document.getElementById(`tipo-${id}`)?.value||'').trim().toLowerCase();
+    const nome = (document.getElementById(`nome-${id}`)?.value||'').trim().toLowerCase();
+    const cor  = document.getElementById(`cor-${id}`)?.value||'';
+    const tam  = document.getElementById(`tam-${id}`)?.value||'';
+    // Tamanho: sort PP<P<M<G<GG<XGG numerically, then numeric sizes
+    const tamOrder = ['PP','P','M','G','GG','XGG','34','36','38','40','42','44','46','48','UN'];
+    const tamIdx = tamOrder.indexOf(tam);
+    const tamSort = tamIdx >= 0 ? String(tamIdx).padStart(2,'0') : tam;
+    return `${tipo}|${nome}|${cor}|${tamSort}`;
+  }
+
+  rows.sort((a, b) => getSortKey(a).localeCompare(getSortKey(b), 'pt-BR'));
+  rows.forEach(tr => tbody.appendChild(tr));
+  renumberRows();
+
+  // Visual feedback on button
+  const btn = document.getElementById('sort-btn');
+  const orig = btn.textContent;
+  btn.textContent = '✓ Ordenado';
+  btn.style.color = 'var(--green-t)';
+  btn.style.borderColor = 'var(--green-b)';
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }, 1800);
+}
+
+function resetAll() {
+  if (!confirm('Isso vai apagar todas as configurações salvas (nome da marca e coleções) e reiniciar do zero.\n\nTem certeza?')) return;
+  localStorage.removeItem(LS_KEY);
+  location.reload();
+}
+function exportCSV() {
+  const rows=document.querySelectorAll('#sku-tbody tr');
+  let csv='SKU,Nome do produto,Tipo,Cor,Tamanho,Coleção\n';
+  rows.forEach(tr=>{
+    const id=tr.id.replace('row-','');
+    const sku=document.getElementById(`sku-${id}`)?.textContent||'';
+    if(!sku||sku.includes('preencha')||sku.includes('complete')||sku.includes('não')) return;
+    const nome=document.getElementById(`nome-${id}`)?.value||'';
+    const tipo=document.getElementById(`tipo-${id}`)?.value||'';
+    const corC=document.getElementById(`cor-${id}`)?.value||'';
+    const tamC=document.getElementById(`tam-${id}`)?.value||'';
+    const colC=document.getElementById(`col-${id}`)?.value||'';
+    const corN=CORES.find(c=>c.cod===corC)?.nome||'';
+    const tamN=TAMANHOS.find(t=>t.cod===tamC)?.nome||'';
+    const colN=COLECOES.find(c=>c.cod===colC)?.nome||'';
+    csv+=`"${sku}","${nome}","${tipo}","${corN}","${tamN}","${colN}"\n`;
+  });
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  const today = new Date(); const dd = String(today.getDate()).padStart(2,'0'); const mm = String(today.getMonth()+1).padStart(2,'0'); const yyyy = today.getFullYear();
+  a.download = marcaNome.toUpperCase() + '_SKUs_' + yyyy + '-' + mm + '-' + dd + '.csv'; a.click();
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  const labels={gerador:'gerador',tabelas:'tabela',instrucoes:'instru'};
+  document.querySelectorAll('.tab').forEach(el=>{
+    if(el.textContent.toLowerCase().includes(labels[name])) el.classList.add('active');
+  });
+}
+
+// ── Bulk modal ────────────────────────────────────────────────
+function openBulk() {
+  const colSel=document.getElementById('bulk-col');
+  colSel.innerHTML='<option value="">Selecionar...</option>';
+  COLECOES.forEach(c=>{ const o=document.createElement('option'); o.value=c.cod; o.textContent=c.nome; colSel.appendChild(o); });
+  const coresDiv=document.getElementById('bulk-cores');
+  if(!coresDiv.children.length) {
+    CORES.forEach(c=>{ const l=document.createElement('label'); l.className='check-chip'; l.innerHTML=`<input type="checkbox" value="${c.cod}" onchange="toggleChip(this);updateBulkPreview()"><span>${c.nome}</span>`; coresDiv.appendChild(l); });
+  }
+  const tamDiv=document.getElementById('bulk-tamanhos');
+  if(!tamDiv.children.length) {
+    TAMANHOS.forEach(t=>{ const l=document.createElement('label'); l.className='check-chip'; l.innerHTML=`<input type="checkbox" value="${t.cod}" onchange="toggleChip(this);updateBulkPreview()"><span>${t.nome}</span>`; tamDiv.appendChild(l); });
+  }
+  document.getElementById('modal-overlay').classList.add('open');
+  updateBulkPreview();
+}
+function closeBulk() { document.getElementById('modal-overlay').classList.remove('open'); }
+function handleOverlayClick(e) { if(e.target===document.getElementById('modal-overlay')) closeBulk(); }
+function toggleChip(input) { input.parentElement.classList.toggle('checked',input.checked); }
+function updateBulkPreview() {
+  const tipo=(document.getElementById('bulk-tipo')?.value||'').trim();
+  const nome=(document.getElementById('bulk-nome')?.value||'').trim();
+  // filled state for modal fields
+  const bTipo=document.getElementById('bulk-tipo');
+  const bNome=document.getElementById('bulk-nome');
+  const bCol=document.getElementById('bulk-col');
+  if(bTipo) bTipo.classList.toggle('filled', tipo.length>0);
+  if(bNome) bNome.classList.toggle('filled', nome.length>0);
+  if(bCol)  bCol.classList.toggle('filled',  bCol.value!=='');
+  const tipoCod=findTipoCod(tipo);
+  const codPrev=document.getElementById('bulk-cod-preview');
+  if(tipo&&tipoCod) codPrev.textContent='→ código: '+tipoCod;
+  else if(tipo) codPrev.textContent='→ tipo não reconhecido';
+  else codPrev.textContent='';
+  const cores=[...document.querySelectorAll('#bulk-cores input:checked')].map(i=>i.value);
+  const tams=[...document.querySelectorAll('#bulk-tamanhos input:checked')].map(i=>i.value);
+  const total=cores.length*tams.length;
+  const prev=document.getElementById('bulk-preview');
+  const _gb2=document.getElementById('bulk-generate-btn'); if(_gb2) _gb2.disabled=true;
+    if(!tipoCod||!nome||!cores.length||!tams.length){ prev.innerHTML='Preencha tipo, nome, selecione ao menos 1 cor, 1 tamanho e uma coleção.<br><span style="font-size:11px;color:var(--faint)">Sem coleções disponíveis? Use <strong>⚙ Configurações</strong> no cabeçalho para registrar as coleções da sua marca.</span>'; return; }
+  const examples=[];
+  outer: for(const c of cores) for(const t of tams){ examples.push(buildSKU(tipoCod,nome,c,t)); if(examples.length>=3) break outer; }
+  prev.innerHTML=`<strong>${total} linha${total>1?'s':''} serão geradas</strong><br>Exemplos: ${examples.map(s=>`<code style="font-family:'DM Mono',monospace;font-size:11px">${s}</code>`).join(' · ')}${total>3?' · …':''}`;
+  const _gb=document.getElementById('bulk-generate-btn'); if(_gb) _gb.disabled=false;
+}
+function generateBulk() {
+  const tipo=(document.getElementById('bulk-tipo')?.value||'').trim();
+  const nome=(document.getElementById('bulk-nome')?.value||'').trim();
+  const colCod=document.getElementById('bulk-col')?.value||'';
+  const tipoCod=findTipoCod(tipo);
+  const cores=[...document.querySelectorAll('#bulk-cores input:checked')].map(i=>i.value);
+  const tams=[...document.querySelectorAll('#bulk-tamanhos input:checked')].map(i=>i.value);
+  if(!tipoCod){alert('Tipo não reconhecido.');return;}
+  if(!nome){alert('Preencha o nome base.');return;}
+  if(!cores.length||!tams.length){alert('Selecione ao menos 1 cor e 1 tamanho.');return;}
+  for(const corCod of cores) for(const tamCod of tams) addRow({tipo,nome,cor:corCod,tam:tamCod,col:colCod});
+  const _bt=document.getElementById('bulk-tipo'); _bt.value=''; _bt.classList.remove('filled');
+  const _bn=document.getElementById('bulk-nome'); _bn.value=''; _bn.classList.remove('filled');
+  const _bc=document.getElementById('bulk-col');  _bc.value=''; _bc.classList.remove('filled');
+  document.querySelectorAll('#bulk-cores input, #bulk-tamanhos input').forEach(i=>{ i.checked=false; i.parentElement.classList.remove('checked'); });
+  const _gb3=document.getElementById('bulk-generate-btn'); if(_gb3) _gb3.disabled=true;
+  updateBulkPreview(); closeBulk();
+}
+
+// ── Ref grid ──────────────────────────────────────────────────
+function buildRefGrid() {
+  const grid=document.getElementById('ref-grid');
+  grid.innerHTML='';
+  const sections=[
+    {title:'Tipos de peça',data:TIPOS,alias:true},
+    {title:'Cores',data:CORES,alias:false},
+    {title:'Tamanhos',data:TAMANHOS,alias:false},
+    {title:'Coleções',data:COLECOES,alias:false},
+  ];
+  sections.forEach(s=>{
+    const div=document.createElement('div'); div.className='ref-section';
+    let html=`<div class="ref-hdr">${s.title}</div>`;
+    s.data.forEach(item=>{
+      html+=`<div class="ref-row"><div class="ref-code">${item.cod}</div><div class="ref-name">${item.nome}</div>${s.alias&&item.alias?`<div class="ref-alias">${item.alias.join(', ')}</div>`:''}</div>`;
+    });
+    div.innerHTML=html; grid.appendChild(div);
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────
+const hasConfig = loadConfig();
+if (hasConfig && COLECOES.length) {
+  launchApp();
+} else {
+  initSetupColList();
+  document.getElementById('setup-overlay').style.display='flex';
+}
+</script>
+</body>
+</html>
