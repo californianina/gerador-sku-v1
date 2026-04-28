@@ -1,1 +1,0 @@
-# gerador-sku-v1
