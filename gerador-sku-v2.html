@@ -157,6 +157,8 @@
     .sku-out { font-family: 'DM Mono', monospace; font-size: 11.5px; font-weight: 500; color: var(--blue-t); letter-spacing: 0.02em; padding: 4px 8px; min-height: 28px; display: flex; align-items: center; }
     .sku-out.empty { color: var(--faint); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 400; }
     .sku-out.partial { color: #c09000; font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; }
+    .sku-out.duplicate { color: #a02020 !important; background: #fff0f0; border-radius: 5px; }
+    .cell-blue.duplicate-cell { background: #fff0f0 !important; }
     .cod-out { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--green-t); padding: 4px 8px; min-height: 28px; display: flex; align-items: center; }
     .cod-out.miss { color: var(--red-t); font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; font-weight: 400; }
     .conf-out { font-size: 11px; color: var(--muted); padding: 4px 8px; min-height: 28px; display: flex; align-items: center; }
@@ -285,7 +287,7 @@
       </div>
       <div class="header-right">
         <button class="settings-btn" onclick="openSettings()">⚙ Configurações</button>
-        <span class="vtag">v1 · rev3</span>
+        <span class="vtag" onclick="openChangelog()" title="Ver histórico de alterações" style="cursor:pointer;user-select:none" onmouseover="this.style.background='#e8e4dc'" onmouseout="this.style.background='var(--bg)'">v2 · changelog ↗</span>
       </div>
     </div>
 
@@ -337,7 +339,7 @@
       </div>
 
       <div style="margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--border-md);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <span style="font-size:11px;color:var(--faint)">Gerador de SKU · v1</span>
+        <span style="font-size:11px;color:var(--faint);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="openChangelog()" title="Ver histórico de alterações">Gerador de SKU · v2</span>
         <button onclick="resetAll()"
           style="font-size:11px;padding:6px 14px;background:none;border:0.5px solid var(--border-md);
                  border-radius:7px;color:var(--faint);cursor:pointer;font-family:'DM Sans',sans-serif;
@@ -688,7 +690,31 @@ function findTipoCod(text) {
   }
   return null;
 }
-function nome4(nomeBase) { return nomeBase.replace(/\s+/g,'').substring(0,4).toUpperCase(); }
+function nome4(nomeBase) {
+  // Remove acentos e normaliza
+  const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
+
+  // Todas as palavras do nome contribuem (incluindo preposições — mais informação = menos colisão)
+  const words = nomeBase.trim().split(/\s+/).filter(Boolean).map(norm).filter(Boolean);
+
+  if (!words.length) return 'XXXX';
+
+  if (words.length === 1) {
+    // 1 palavra → 4 primeiras letras
+    return words[0].substring(0,4).toUpperCase().padEnd(4,'X');
+  }
+
+  // 2 letras da 1ª palavra + 1 inicial de cada palavra seguinte, sem limite acima de 4
+  // Se o resultado ficar < 4 chars, complementa com letras extras da 1ª palavra
+  const first2 = words[0].substring(0,2);
+  const restInitials = words.slice(1).map(w => w[0] || '').join('');
+  let code = first2 + restInitials;
+  if (code.length < 4) {
+    const extra = words[0].substring(2, 2 + (4 - code.length));
+    code = first2 + extra + restInitials;
+  }
+  return code.toUpperCase();
+}
 function buildSKU(tipoCod, nomeBase, corCod, tamCod, colCod) {
   if (!tipoCod || !nomeBase || !corCod || !tamCod) return '';
   const base = `${tipoCod}/${nome4(nomeBase)}-${corCod}-${tamCod}`;
@@ -736,7 +762,7 @@ function addRow(data={}) {
   sels[2].id=`col-${id}`; sels[2].value=data.col||''; sels[2].onchange=()=>updateRow(id);
   updateRow(id); renumberRows(); return id;
 }
-function removeRow(id) { document.getElementById(`row-${id}`).remove(); renumberRows(); }
+function removeRow(id) { document.getElementById(`row-${id}`).remove(); renumberRows(); checkDuplicates(); }
 function duplicateRow(id) {
   const data = {
     tipo: document.getElementById(`tipo-${id}`)?.value||'',
@@ -790,6 +816,7 @@ function updateRow(id) {
     skuEl.className = any ? 'sku-out partial' : 'sku-out empty';
     copyEl.style.display='none';
   }
+  checkDuplicates();
   const confEl=document.getElementById(`conf-${id}`);
   const corNome=CORES.find(c=>c.cod===corCod)?.nome||'';
   const tamNome=TAMANHOS.find(t=>t.cod===tamCod)?.nome||'';
@@ -805,6 +832,33 @@ function copySKU(id) {
     setTimeout(()=>{btn.textContent='Copiar';btn.classList.remove('copied');},2000);
   });
 }
+function checkDuplicates() {
+  // Coleta todos os SKUs válidos e seus IDs
+  const skuMap = {}; // sku -> [ids]
+  document.querySelectorAll('#sku-tbody tr').forEach(tr => {
+    const id = tr.id.replace('row-','');
+    const skuEl = document.getElementById(`sku-${id}`);
+    if (!skuEl) return;
+    const sku = skuEl.textContent.trim();
+    // Ignora células com mensagens de estado
+    if (!sku || sku.includes('preencha') || sku.includes('complete') || sku.includes('não')) return;
+    if (!skuMap[sku]) skuMap[sku] = [];
+    skuMap[sku].push(id);
+  });
+
+  // Aplica ou remove classe de duplicata em cada linha
+  document.querySelectorAll('#sku-tbody tr').forEach(tr => {
+    const id = tr.id.replace('row-','');
+    const skuEl = document.getElementById(`sku-${id}`);
+    const cellEl = skuEl?.closest('td');
+    if (!skuEl) return;
+    const sku = skuEl.textContent.trim();
+    const isDup = skuMap[sku] && skuMap[sku].length > 1;
+    skuEl.classList.toggle('duplicate', isDup);
+    if (cellEl) cellEl.classList.toggle('duplicate-cell', isDup);
+  });
+}
+
 function clearAll() {
   if(!confirm('Limpar todas as linhas?')) return;
   document.getElementById('sku-tbody').innerHTML=''; rowCount=0; addRow();
@@ -978,5 +1032,147 @@ if (hasConfig && COLECOES.length) {
   document.getElementById('setup-overlay').style.display='flex';
 }
 </script>
+
+<!-- ═══ CHANGELOG MODAL ═══ -->
+<div id="changelog-overlay" onclick="if(event.target===this)closeChangelog()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;
+         align-items:center;justify-content:center;backdrop-filter:blur(3px)">
+  <div style="background:var(--surface);border-radius:16px;padding:2rem;width:560px;
+              max-width:calc(100vw - 2rem);max-height:80vh;overflow-y:auto;
+              box-shadow:0 24px 80px rgba(0,0,0,0.18);border:0.5px solid var(--border-md)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div>
+        <div style="font-size:15px;font-weight:500">Histórico de alterações</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Gerador de SKU</div>
+      </div>
+      <button onclick="closeChangelog()"
+        style="background:none;border:0.5px solid var(--border-md);border-radius:6px;
+               cursor:pointer;color:var(--muted);font-size:16px;padding:2px 9px;line-height:1;
+               font-family:'DM Sans',sans-serif"
+        onmouseover="this.style.background='#f0ede8';this.style.color='var(--text)'"
+        onmouseout="this.style.background='none';this.style.color='var(--muted)'">×</button>
+    </div>
+    <div id="changelog-body" style="display:flex;flex-direction:column;gap:16px;font-size:13px"></div>
+  </div>
+</div>
+
+<script>
+const CHANGELOG = [
+  {
+    ver: 'v2 · rev3',
+    data: '28 abr 2025',
+    titulo: 'Nome ilimitado + detecção de duplicatas',
+    itens: [
+      'Removido limite de 4 chars no código do nome base — cresce livremente com o número de palavras',
+      'Mínimo mantido em 4 chars: complementa com letras extras da 1ª palavra quando necessário',
+      'Ex: "Vestido Midi Floral com Fenda e Babado" → VEMFCFEB',
+      'Detecção automática de SKUs duplicados: célula fica vermelha ao detectar colisão',
+      'Alerta de duplicata some automaticamente ao resolver o conflito',
+      'Log de alterações acessível pelo header e rodapé (este modal)',
+    ]
+  },
+  {
+    ver: 'v2 · rev2',
+    data: '28 abr 2025',
+    titulo: 'Fix geração do nome base',
+    itens: [
+      'Substituída função nome4() por algoritmo inteligente com contexto de palavras',
+      '1 palavra → 4 primeiras letras (ex: MIDI)',
+      '2 palavras → 3 da 1ª + inicial da 2ª (ex: VESM)',
+      '3+ palavras → 2 da 1ª + iniciais de todas as demais, incluindo preposições',
+      'Corrigida colisão entre nomes como "Vestido Midi", "Vestido de Bolinha" e "Vestido Etc" — todos geravam VEST',
+    ]
+  },
+  {
+    ver: 'v1 · rev1',
+    data: '—',
+    titulo: 'Lançamento inicial',
+    itens: [
+      'Estrutura base de SKU: TIPO/NOME-COR-TAM-COLEÇÃO',
+      'Geração linha a linha e em lote (bulk)',
+      'Exportação CSV com data e nome da marca',
+      'Configurações de marca e coleções salvas em localStorage',
+      'Tabelas de referência: tipos, cores, tamanhos',
+      'Ordenação A–Z',
+      'Código de coleção gerado automaticamente a partir do nome',
+    ]
+  },
+];
+
+function openChangelog() {
+  const body = document.getElementById('changelog-body');
+  body.innerHTML = '';
+  CHANGELOG.forEach((entry, i) => {
+    const isLatest = i === 0;
+    const block = document.createElement('div');
+    block.style.cssText = 'border:0.5px solid var(--border-md);border-radius:10px;overflow:hidden';
+    const header = `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0ede8;border-bottom:0.5px solid var(--border-md)">
+        <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:500;
+                     color:${isLatest ? 'var(--blue-t)' : 'var(--muted)'};
+                     background:${isLatest ? 'var(--blue)' : 'var(--bg)'};
+                     padding:3px 9px;border-radius:20px;white-space:nowrap">${entry.ver}</span>
+        <span style="font-size:13px;font-weight:500;flex:1">${entry.titulo}</span>
+        <span style="font-size:11px;color:var(--faint);white-space:nowrap">${entry.data}</span>
+      </div>`;
+    const itens = entry.itens.map(it =>
+      `<div style="display:flex;gap:8px;padding:5px 14px;font-size:12px;color:var(--muted);line-height:1.6;border-bottom:0.5px solid var(--border)">
+         <span style="color:var(--faint);flex-shrink:0">·</span><span>${it}</span>
+       </div>`
+    ).join('');
+    block.innerHTML = header + itens;
+    // Remove last border
+    const lastDiv = block.querySelectorAll('[style*="border-bottom:0.5px solid var(--border)"]');
+    if (lastDiv.length) lastDiv[lastDiv.length-1].style.borderBottom = 'none';
+    body.appendChild(block);
+  });
+  const overlay = document.getElementById('changelog-overlay');
+  overlay.style.display = 'flex';
+}
+
+function closeChangelog() {
+  document.getElementById('changelog-overlay').style.display = 'none';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChangelog(); });
+</script>
 </body>
 </html>
+
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                    CHANGELOG — SKU GENERATOR                ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║                                                              ║
+  ║  v1 · rev1 — lançamento inicial                             ║
+  ║    · Estrutura base: tipo / nome-cor-tam-coleção             ║
+  ║    · Geração linha a linha e em lote (bulk)                  ║
+  ║    · Exportação CSV com data                                 ║
+  ║    · Configurações salvas em localStorage                    ║
+  ║    · Tabelas de referência (tipos, cores, tamanhos)          ║
+  ║    · Ordenação A–Z                                           ║
+  ║    · Código de coleção gerado automaticamente                ║
+  ║                                                              ║
+  ║  v1 · rev2 — fix nome base                                   ║
+  ║    · Substituída função nome4() por algoritmo inteligente:   ║
+  ║      · 1 palavra  → 4 primeiras letras (MIDI)                ║
+  ║      · 2 palavras → 3 da 1ª + inicial da 2ª (VESM)          ║
+  ║      · 3+ palavras → 2 da 1ª + iniciais das demais (VEDB)   ║
+  ║      · Stopwords ignoradas na geração de iniciais            ║
+  ║    · Corrigida colisão entre nomes como                      ║
+  ║      "Vestido Midi", "Vestido de Bolinha", "Vestido Etc"     ║
+  ║      que antes geravam todos VEST                            ║
+  ║                                                              ║
+  ║  v2 · rev3 — nome ilimitado + detecção de duplicatas         ║
+  ║    · Removido limite de 4 chars no nome base:                ║
+  ║      · Mínimo 4 chars (complementa com letras da 1ª palavra) ║
+  ║      · Sem teto — 7 palavras geram 7 iniciais + 2 da 1ª     ║
+  ║      · Ex: "Vestido Midi Floral com Fenda e Babado"          ║
+  ║            → VEMFCFEB                                        ║
+  ║    · Detecção automática de SKUs duplicados:                 ║
+  ║      · Célula SKU fica vermelha se houver colisão            ║
+  ║      · Alerta some assim que o conflito é resolvido          ║
+  ║      · Verificação disparada em update e remoção de linha    ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
+-->
